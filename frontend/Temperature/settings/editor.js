@@ -155,9 +155,56 @@ function updateHint() {
 }
 
 /* ---------------- Selection / modes ---------------- */
+function applySelectionHighlight() {
+  els.markers.querySelectorAll(".edit-marker").forEach((m) => {
+    m.classList.toggle("selected", m.dataset.room === state.selected);
+  });
+  els.areas.querySelectorAll(".edit-area").forEach((a) => {
+    a.classList.toggle("selected", a.dataset.room === state.selected);
+  });
+  if (state.selected) {
+    els.roomSelect.value = state.selected;
+    els.roomLimit.value = state.rooms[state.selected].max_temp;
+  }
+}
+
 function selectRoom(num) {
   state.selected = num;
   renderAll();
+}
+
+function onMarkerDown(event, num) {
+  event.preventDefault();
+  state.selected = num;
+
+  // In draw mode a marker click just (re)selects the room + shows its handles.
+  if (state.mode !== "move") {
+    renderAll();
+    return;
+  }
+
+  // Move mode: update the highlight WITHOUT rebuilding the DOM, otherwise the
+  // very element we grabbed gets destroyed and the drag never starts.
+  applySelectionHighlight();
+
+  const marker = event.currentTarget;
+  try { marker.setPointerCapture(event.pointerId); } catch (e) {}
+
+  const move = (e) => {
+    const [x, y] = toImageCoords(e.clientX, e.clientY);
+    state.rooms[num].x = x;
+    state.rooms[num].y = y;
+    marker.style.left = x + "px";
+    marker.style.top = y + "px";
+    markDirty(true);
+  };
+  const up = () => {
+    try { marker.releasePointerCapture(event.pointerId); } catch (e) {}
+    marker.removeEventListener("pointermove", move);
+    marker.removeEventListener("pointerup", up);
+  };
+  marker.addEventListener("pointermove", move);
+  marker.addEventListener("pointerup", up);
 }
 
 function setMode(mode) {
@@ -185,36 +232,12 @@ function toImageCoords(clientX, clientY) {
   return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
 }
 
-/* ---------------- Dragging labels ---------------- */
-function onMarkerDown(event, num) {
-  event.preventDefault();
-  selectRoom(num);
-  if (state.mode !== "move") return;
-  const marker = event.currentTarget;
-  marker.setPointerCapture(event.pointerId);
-
-  const move = (e) => {
-    const [x, y] = toImageCoords(e.clientX, e.clientY);
-    state.rooms[num].x = x;
-    state.rooms[num].y = y;
-    marker.style.left = x + "px";
-    marker.style.top = y + "px";
-    markDirty(true);
-  };
-  const up = (e) => {
-    marker.releasePointerCapture(event.pointerId);
-    marker.removeEventListener("pointermove", move);
-    marker.removeEventListener("pointerup", up);
-  };
-  marker.addEventListener("pointermove", move);
-  marker.addEventListener("pointerup", up);
-}
-
 /* ---------------- Drawing polygons ---------------- */
 function onCanvasClick(event) {
   if (state.mode !== "draw" || !state.selected) return;
-  // Ignore clicks that originate on a handle/marker (handled separately)
+  // Ignore clicks that originate on a handle or a marker (handled separately)
   if (event.target.classList && event.target.classList.contains("vertex-handle")) return;
+  if (event.target.closest && event.target.closest(".edit-marker")) return;
   const [x, y] = toImageCoords(event.clientX, event.clientY);
   state.rooms[state.selected].polygon.push([x, y]);
   markDirty(true);
