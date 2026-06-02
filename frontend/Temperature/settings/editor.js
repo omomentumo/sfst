@@ -13,7 +13,8 @@ const state = {
   layout: { width: 1921, height: 729 },
   rooms: {},          // room_num -> { x, y, max_temp, polygon: [[x,y],...] }
   order: [],          // room numbers in display order
-  mode: "move",       // "move" | "draw"
+  mode: "move",       // "move" | "draw" | "rect"
+  rectStart: null,
   selected: null,
   scale: 1,
   dirty: false,
@@ -219,6 +220,7 @@ function setMode(mode) {
   state.mode = mode;
   els.modeMove.classList.toggle("is-active", mode === "move");
   els.modeDraw.classList.toggle("is-active", mode === "draw");
+  els.modeRect.classList.toggle("is-active", mode === "rect");
   els.canvas.classList.toggle("draw-mode", mode === "draw");
   renderAreas();
   updateHint();
@@ -242,7 +244,25 @@ function toImageCoords(clientX, clientY) {
 
 /* ---------------- Drawing polygons ---------------- */
 function onCanvasClick(event) {
-  if (state.mode !== "draw" || !state.selected) return;
+  if (!state.selected) return;
+  if (state.mode === "rect") {
+    if (event.target.classList?.contains("vertex-handle")) return;
+    const [x, y] = toImageCoords(event.clientX, event.clientY);
+    if (!state.rectStart) {
+      state.rectStart = [x, y];
+    } else {
+      const [x1, y1] = state.rectStart;
+      state.rooms[state.selected].polygon = [
+        [x1, y1], [x, y1], [x, y], [x1, y]
+      ];
+      state.rectStart = null;
+      markDirty(true);
+      renderAreas();
+      renderRoomSelect();
+    }
+    return;
+  }
+  if (state.mode !== "draw") return;
   // Ignore clicks that originate on a handle or a marker (handled separately)
   if (event.target.classList && event.target.classList.contains("vertex-handle")) return;
   if (event.target.closest && event.target.closest(".edit-marker")) return;
@@ -294,6 +314,14 @@ function clearArea() {
   markDirty(true);
   renderAreas();
   renderRoomSelect();
+}
+
+function centerMarker() {
+  if (!state.selected) return;
+  state.rooms[state.selected].x = state.layout.width / 2;
+  state.rooms[state.selected].y = state.layout.height / 2;
+  markDirty(true);
+  renderMarkers();
 }
 
 /* ---------------- Save / reset ---------------- */
@@ -402,6 +430,8 @@ function cache() {
   els.saveStatus = document.getElementById("save-status");
   els.undoPoint = document.getElementById("undo-point");
   els.clearArea = document.getElementById("clear-area");
+  els.modeRect = document.getElementById("mode-rect");
+els.centerMarker = document.getElementById("center-marker");
 }
 
 function bind() {
@@ -417,6 +447,8 @@ function bind() {
   });
   els.undoPoint.addEventListener("click", undoPoint);
   els.clearArea.addEventListener("click", clearArea);
+  els.modeRect.addEventListener("click", () => setMode("rect"));
+  els.centerMarker.addEventListener("click", centerMarker);
   els.saveBtn.addEventListener("click", save);
   els.resetBtn.addEventListener("click", resetAll);
   els.logoutBtn.addEventListener("click", logout);
