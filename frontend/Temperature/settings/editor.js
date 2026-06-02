@@ -7,6 +7,7 @@
 ===================================================== */
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+const BUILD = "2026-06-02c (drag-fix)";
 
 const state = {
   layout: { width: 1921, height: 729 },
@@ -188,9 +189,10 @@ function onMarkerDown(event, num) {
   applySelectionHighlight();
 
   const marker = event.currentTarget;
-  try { marker.setPointerCapture(event.pointerId); } catch (e) {}
+  let moved = false;
 
   const move = (e) => {
+    moved = true;
     const [x, y] = toImageCoords(e.clientX, e.clientY);
     state.rooms[num].x = x;
     state.rooms[num].y = y;
@@ -199,12 +201,18 @@ function onMarkerDown(event, num) {
     markDirty(true);
   };
   const up = () => {
-    try { marker.releasePointerCapture(event.pointerId); } catch (e) {}
-    marker.removeEventListener("pointermove", move);
-    marker.removeEventListener("pointerup", up);
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", up);
   };
-  marker.addEventListener("pointermove", move);
-  marker.addEventListener("pointerup", up);
+  // Listen on the document (not the marker) so the drag keeps tracking even
+  // when the cursor leaves the small marker. Bind both pointer and mouse for
+  // maximum browser compatibility.
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up);
+  document.addEventListener("mousemove", move);
+  document.addEventListener("mouseup", up);
 }
 
 function setMode(mode) {
@@ -249,7 +257,6 @@ function onVertexDown(event, idx) {
   event.preventDefault();
   event.stopPropagation();
   const handle = event.target;
-  handle.setPointerCapture(event.pointerId);
   const poly = state.rooms[state.selected].polygon;
 
   const move = (e) => {
@@ -262,12 +269,15 @@ function onVertexDown(event, idx) {
     markDirty(true);
   };
   const up = () => {
-    handle.releasePointerCapture(event.pointerId);
-    handle.removeEventListener("pointermove", move);
-    handle.removeEventListener("pointerup", up);
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", up);
   };
-  handle.addEventListener("pointermove", move);
-  handle.addEventListener("pointerup", up);
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up);
+  document.addEventListener("mousemove", move);
+  document.addEventListener("mouseup", up);
 }
 
 function undoPoint() {
@@ -420,6 +430,14 @@ function bind() {
 async function init() {
   cache();
   bind();
+  console.log("[Temperature editor] build " + BUILD + " loaded");
+  const title = document.querySelector(".editor-header h1");
+  if (title && !title.querySelector(".build-badge")) {
+    const badge = document.createElement("span");
+    badge.className = "build-badge";
+    badge.textContent = "build " + BUILD;
+    title.appendChild(badge);
+  }
   if (await checkAuth()) {
     enterEditor();
   } else {
